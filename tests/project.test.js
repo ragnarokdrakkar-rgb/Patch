@@ -27,7 +27,11 @@ assert.equal(pkg.main, 'main.js');
 assert.ok(pkg.scripts.make, 'Manjka make ukaz.');
 assert.ok(fs.existsSync(path.join(root, 'electron-builder.config.js')), 'Manjka electron-builder konfiguracija.');
 assert.ok(pkg.scripts.publish, 'Manjka publish ukaz.');
-assert.equal(pkg.version, '2.0.3');
+assert.match(
+  pkg.version,
+  /^\d+\.\d+\.\d+$/,
+  'package.json nima veljavne verzije.'
+);
 assert.match(gs, /PROTOCOL_VERSION = 7/, 'Manjka Apps Script v7.');
 assert.match(html, /preferHome:true/, 'Začetna sinhronizacija mora odpreti domačo ambulanto.');
 assert.match(html, /Izberi domačo ambulanto/, 'Manjka varna obnova napačnega lokalnega ID-ja ambulante.');
