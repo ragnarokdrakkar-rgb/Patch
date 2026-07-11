@@ -1,7 +1,7 @@
 {
   "name": "depo-injekcije-psa",
   "productName": "Depo Injekcije PSA",
-  "version": "2.0.4",
+  "version": "2.0.5",
   "description": "Windows aplikacija v7 za dve ambulanti; patch 2.0.3 za varno obnovo domače ambulante, konfliktna sporočila in bootstrap posodobitev brez novega installerja.",
   "main": "main.js",
   "author": "Kemal Jazavac",
