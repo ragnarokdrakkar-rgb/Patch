@@ -162,7 +162,7 @@ function startUpdates() {
   updaterStarted = true;
 
   /*
-   * Ne uporabljamo autoUpdater.setFeedURL().
+   * Ne uporabljamo rocne nastavitve URL-ja za posodobitve.
    * electron-builder v installer vgradi app-update.yml s pravilnim GitHub
    * repozitorijem. Ročni setFeedURL lahko to konfiguracijo prepiše.
    */
