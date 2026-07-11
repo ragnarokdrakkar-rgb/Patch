@@ -1,7 +1,7 @@
 {
   "name": "depo-injekcije-psa",
   "productName": "Depo Injekcije PSA",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Windows aplikacija v7 za ambulanti Medur in Koper; 2.0.7 popravi samodejne posodobitve in doda updater.log.",
   "main": "main.js",
   "author": "Kemal Jazavac",
