@@ -37,7 +37,7 @@ jobs:
           }
 
       - name: Build Windows installer
-        run: npm run make
+        run: npm run make -- --publish never
 
       - name: Verify release files
         shell: pwsh
@@ -71,7 +71,7 @@ jobs:
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
 
           if ($LASTEXITCODE -eq 0) {
-            Write-Host "Release $tag že obstaja. Nalagam oziroma zamenjujem assets."
+            Write-Host "Release $tag ze obstaja. Nalagam oziroma zamenjujem assets."
             gh release upload $tag @assets --clobber --repo $env:GITHUB_REPOSITORY
           } else {
             Write-Host "Ustvarjam release $tag."
