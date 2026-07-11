@@ -32,11 +32,32 @@ assert.match(
   /^\d+\.\d+\.\d+$/,
   'package.json nima veljavne verzije.'
 );
+
 assert.match(gs, /PROTOCOL_VERSION = 7/, 'Manjka Apps Script v7.');
 assert.match(html, /preferHome:true/, 'Začetna sinhronizacija mora odpreti domačo ambulanto.');
 assert.match(html, /Izberi domačo ambulanto/, 'Manjka varna obnova napačnega lokalnega ID-ja ambulante.');
 assert.match(html, /repairHomeClinicFromDirectory/, 'Manjka samodejna preslikava starega ID-ja domače ambulante.');
 assert.match(html, /homeAmbulantaName/, 'Lokalne nastavitve ne hranijo imena domače ambulante.');
-assert.match(main, /update-config\.json/, 'Main proces ne podpira lokalne bootstrap konfiguracije posodobitev.');
+
+assert.doesNotMatch(
+  main,
+  /autoUpdater\.setFeedURL\s*\(/,
+  'Updater ne sme ročno prepisati vgrajenega app-update.yml.'
+);
+assert.match(
+  main,
+  /checkForUpdatesAndNotify/,
+  'Main proces ne preverja samodejnih posodobitev.'
+);
+assert.match(
+  main,
+  /app-update\.yml/,
+  'Main proces nima dokumentirane uporabe vgrajenega app-update.yml.'
+);
+assert.match(
+  main,
+  /updater\.log/,
+  'Main proces ne ustvarja updater.log.'
+);
 
 console.log('Project structure tests passed.');
