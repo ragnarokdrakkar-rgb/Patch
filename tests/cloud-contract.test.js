@@ -25,5 +25,9 @@ assert.match(html, /action=loadClinic/, 'Aplikacija ne nalaga filtrirane ambulan
 assert.match(html, /confirmPatientTransfer/, 'Manjka uporabniški tok premestitve.');
 assert.match(html, /acceptPatientTransfer/, 'Manjka sprejem pacienta.');
 assert.match(html, /isReadOnlyClinic/, 'Manjka način samo za ogled druge ambulante.');
+assert.match(html, /async function switchAmbulanta/, 'Preklop ambulante mora podpirati nalaganje iz oblaka.');
+assert.match(html, /cloudPull\(\{clinicId:id,force:true,targetClinicId:id/, 'Preklop ne nalaga izbrane ambulante.');
+assert.match(html, /opts\.clinicId\|\|homeAmbulantaId/, 'Cloud pull ne podpira izbranega clinicId.');
+assert.match(html, /targetClinicId/, 'Oddaljeni snapshot ne izbere zahtevane ambulante.');
 
 console.log('Cloud v7 contract tests passed.');

@@ -1642,9 +1642,30 @@ function rerenderCurrentPage(){
   const active=document.querySelector('.page.active');const name=active?active.id.replace('page-',''):'dashboard';
   showPage(name);updateUrejanjeBadge();
 }
-function switchAmbulanta(id){
+async function switchAmbulanta(id){
+  id=String(id||'');
   if(!id||id===activeAmbulantaId)return;
+  if(!getAmbulanta(id)){showToast('Izbrana ambulanta ne obstaja.','error');renderClinicSwitcher();return;}
+  if(_cloudBusy){showToast('Sinhronizacija trenutno poteka. Poskusi ponovno čez nekaj sekund.','error');renderClinicSwitcher();return;}
+
+  const previousId=activeAmbulantaId;
   syncActiveClinicToStore();persistLocalOnly();
+
+  if(data.settings.sheetsUrl){
+    // Pred odhodom iz domače ambulante vedno varno pošljemo neposlane spremembe.
+    if(previousId===homeAmbulantaId()&&_cloudDirty){
+      if(_cloudPushTimer){clearTimeout(_cloudPushTimer);_cloudPushTimer=null;}
+      const sent=await cloudPush('before-clinic-switch');
+      if(!sent){showToast('Preklop ustavljen: domačih sprememb ni bilo mogoče poslati v oblak.','error');renderClinicSwitcher();return;}
+    }
+
+    const loaded=await cloudPull({clinicId:id,force:true,targetClinicId:id,silent:true});
+    if(!loaded){showToast('Podatkov izbrane ambulante ni bilo mogoče naložiti iz oblaka.','error');renderClinicSwitcher();return;}
+    rerenderCurrentPage();
+    showToast('Odprta ambulanta: '+clinicName(id)+(id===homeAmbulantaId()?'':' · samo ogled'),'success');
+    return;
+  }
+
   if(applyAmbulantaContext(id)){rerenderCurrentPage();showToast('Odprta ambulanta: '+clinicName(id),'success');}
 }
 function setCurrentAsHomeAmbulanta(){
@@ -1965,7 +1986,7 @@ function scheduleCloudPush(){
   _cloudDirty=true;if(_cloudPushTimer)clearTimeout(_cloudPushTimer);_cloudPushTimer=setTimeout(()=>cloudPush('change'),1200);
 }
 async function cloudPull(opts={}){
-  const url=data.settings.sheetsUrl,clinicId=homeAmbulantaId();if(!url)return false;
+  const url=data.settings.sheetsUrl,clinicId=String(opts.clinicId||homeAmbulantaId()||'');if(!url)return false;
   if(!clinicId)return cloudListClinics();
   if(_cloudBusy)return false;
   if(_cloudDirty&&!opts.force){setSyncStatus('syncing','Čakam na lokalno pošiljanje...');return false;}
@@ -1976,15 +1997,17 @@ async function cloudPull(opts={}){
     if(!j.ok){setSyncStatus('error','Napaka: '+(j.error||'?'));return false;}
     if(Number(j.protocol)!==CLOUD_PROTOCOL){setSyncStatus('error','Apps Script ni verzija 7');return false;}
     const remote=JSON.parse(j.data);const remoteRev=Number(j.clinicRevision)||0;
-    if(!opts.force&&remoteRev<=currentClinicRevision()){setSyncStatus('ok','Sinhronizirano');return false;}
-    applyRemoteSnapshot(remote,url,{keepActive:!opts.preferHome,preferHome:!!opts.preferHome});_cloudDirty=false;setSyncStatus('ok','Naloženo iz oblaka ✓');return true;
-  }catch(e){setSyncStatus('error','Ni povezave z oblakom');return false;}finally{_cloudBusy=false;}
+    const sameClinic=String(activeAmbulantaId||'')===clinicId;
+    if(!opts.force&&sameClinic&&remoteRev<=currentClinicRevision()){setSyncStatus('ok','Sinhronizirano');return false;}
+    applyRemoteSnapshot(remote,url,{targetClinicId:String(opts.targetClinicId||clinicId),keepActive:!!opts.keepActive,preferHome:!!opts.preferHome});
+    _cloudDirty=false;setSyncStatus('ok','Naloženo iz oblaka ✓');return true;
+  }catch(e){setSyncStatus('error','Ni povezave z oblakom: '+e.message);return false;}finally{_cloudBusy=false;}
 }
 function applyRemoteSnapshot(remote,url,opts={}){
   const preserve={sheetsUrl:url,autoBackupEnabled:data.settings?.autoBackupEnabled,autoBackupMode:data.settings?.autoBackupMode,lastAutoBackup:data.settings?.lastAutoBackup,backupHour:data.settings?.backupHour};
   const previousActive=activeAmbulantaId||homeAmbulantaId();data=remote;migrateLoadedData();Object.assign(data.settings,preserve);data.settings.lastCloudSync=remote.sync?.updatedAt||new Date().toISOString();
-  const homeId=homeAmbulantaId();
-  let preferred=(opts.preferHome&&getAmbulanta(homeId))?homeId:(opts.keepActive&&getAmbulanta(previousActive)?previousActive:homeId);
+  const homeId=homeAmbulantaId(),targetId=String(opts.targetClinicId||'');
+  let preferred=(targetId&&getAmbulanta(targetId))?targetId:((opts.preferHome&&getAmbulanta(homeId))?homeId:(opts.keepActive&&getAmbulanta(previousActive)?previousActive:homeId));
   if(!getAmbulanta(preferred)&&data.ambulante.length)preferred=data.ambulante[0].id;
   if(preferred)applyAmbulantaContext(preferred,{skipSync:true,saveDevice:false});persistLocalOnly();renderClinicSwitcher();renderDashboard();updateUrejanjeBadge();if(document.getElementById('page-urejanje').classList.contains('active'))renderUrejanje();return true;
 }
@@ -2013,8 +2036,12 @@ async function startAutoSync(skipInitial=false){
       return;
     }
   }
-  if(!skipInitial)await cloudPull({force:data.pacienti.length===0,preferHome:true});
-  if(!_autoSyncInterval)_autoSyncInterval=setInterval(()=>{if(!_cloudBusy)cloudPull({silent:true});},60000);
+  if(!skipInitial)await cloudPull({clinicId:homeId,force:data.pacienti.length===0,preferHome:true,targetClinicId:homeId});
+  if(!_autoSyncInterval)_autoSyncInterval=setInterval(()=>{
+    if(_cloudBusy)return;
+    const clinicId=activeAmbulantaId||homeAmbulantaId();
+    if(clinicId)cloudPull({clinicId,targetClinicId:clinicId,silent:true});
+  },60000);
 }
 function saveSheetsUrl(){const url=document.getElementById('setSheetsUrl').value.trim();data.settings.sheetsUrl=url;persistLocalOnly();showToast('URL shranjen ✓','success');if(url)startAutoSync(false);}
 async function testSync(){
@@ -2022,7 +2049,7 @@ async function testSync(){
   const el=document.getElementById('syncTestResult');el.textContent='Testiram...';
   try{const res=await fetch(url+'?action=ping');const j=await res.json();if(j.ok&&Number(j.protocol)===CLOUD_PROTOCOL){el.textContent='✅ Povezava v7 deluje';el.style.color='var(--accent)';setSyncStatus('ok','Povezan v7');}else{el.textContent='❌ Apps Script mora biti posodobljen na v7';el.style.color='var(--danger)';}}catch(e){el.textContent='❌ Ni povezave';el.style.color='var(--danger)';}
 }
-async function cloudForcePull(){if(!confirm(_cloudDirty?'Obstaja konflikt ali neposlana lokalna sprememba. Lokalna verzija je shranjena v zgodovini. Prenesti sveže podatke iz oblaka?':'Prenesti sveže podatke domače ambulante iz oblaka?'))return;const ok=await cloudPull({force:true});showToast(ok?'Podatki preneseni ✓':'Ni novejših podatkov ali napaka',ok?'success':'error');}
+async function cloudForcePull(){const clinicId=activeAmbulantaId||homeAmbulantaId();if(!clinicId)return;if(!confirm(_cloudDirty?'Obstaja konflikt ali neposlana lokalna sprememba. Lokalna verzija je shranjena v zgodovini. Prenesti sveže podatke iz oblaka?':`Prenesti sveže podatke ambulante ${clinicName(clinicId)} iz oblaka?`))return;const ok=await cloudPull({clinicId,force:true,targetClinicId:clinicId});showToast(ok?'Podatki preneseni ✓':'Ni novejših podatkov ali napaka',ok?'success':'error');}
 async function cloudForcePush(){if(!data.settings.sheetsUrl){showToast('Najprej nastavi URL!','error');return;}const ok=await cloudPush('manual');showToast(ok?'Poslano v oblak ✓':'Pošiljanje ni uspelo',ok?'success':'error');}
 
 // ============================================================
