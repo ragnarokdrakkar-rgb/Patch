@@ -2,21 +2,51 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
-const releaseConfig = require('./release-config');
 const { createStorage } = require('./storage-core');
 
-
 let storage = null;
+let mainWindow = null;
+let updaterStarted = false;
+
+function updaterLogPath() {
+  return path.join(app.getPath('documents'), 'Depo Injekcije', 'updater.log');
+}
+
+function logUpdater(message, error) {
+  try {
+    const file = updaterLogPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const detail = error && (error.stack || error.message || String(error));
+    fs.appendFileSync(
+      file,
+      `[${new Date().toISOString()}] ${message}${detail ? ` | ${detail}` : ''}\n`,
+      'utf8'
+    );
+  } catch (_) {}
+}
 
 function registerIpc() {
   ipcMain.on('storage:load-sync', (event) => {
     try { event.returnValue = storage.loadData(); }
-    catch (error) { event.returnValue = { ok: false, error: error.message, data: null, path: storage.getPaths().data }; }
+    catch (error) {
+      event.returnValue = {
+        ok: false,
+        error: error.message,
+        data: null,
+        path: storage.getPaths().data,
+      };
+    }
   });
 
   ipcMain.on('storage:save-sync', (event, data) => {
     try { event.returnValue = storage.atomicWriteData(data); }
-    catch (error) { event.returnValue = { ok: false, error: error.message, path: storage.getPaths().data }; }
+    catch (error) {
+      event.returnValue = {
+        ok: false,
+        error: error.message,
+        path: storage.getPaths().data,
+      };
+    }
   });
 
   ipcMain.on('storage:clear-sync', (event) => {
@@ -47,7 +77,7 @@ function registerIpc() {
 }
 
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1500,
     height: 950,
     minWidth: 1100,
@@ -66,16 +96,20 @@ function createWindow() {
     },
   });
 
-  win.loadFile('index.html');
-  win.once('ready-to-show', () => win.show());
+  mainWindow.loadFile('index.html');
+  mainWindow.once('ready-to-show', () => mainWindow.show());
 
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'about:blank') {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: {
           autoHideMenuBar: true,
-          webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+          },
         },
       };
     }
@@ -83,52 +117,71 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  win.webContents.on('will-navigate', (event, url) => {
+  mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!url.startsWith('file://')) {
       event.preventDefault();
       shell.openExternal(url).catch(() => {});
     }
   });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
-function readUpdateConfig() {
-  const fallback = {
-    owner: String(releaseConfig.owner || '').trim(),
-    repo: String(releaseConfig.repo || '').trim(),
-  };
-  try {
-    const file = path.join(app.getPath('documents'), 'Depo Injekcije', 'update-config.json');
-    if (!fs.existsSync(file)) return fallback;
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return {
-      owner: String(parsed.owner || fallback.owner || '').trim(),
-      repo: String(parsed.repo || fallback.repo || '').trim(),
-    };
-  } catch (error) {
-    console.warn('update-config.json ni veljaven:', error.message);
-    return fallback;
-  }
+function configureUpdaterEvents() {
+  autoUpdater.on('checking-for-update', () => {
+    logUpdater('Preverjam posodobitve.');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    logUpdater(`Na voljo je verzija ${info.version}.`);
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    logUpdater(`Ni nove posodobitve. Trenutna/latest verzija: ${info.version}.`);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    logUpdater(`Prenos: ${Math.round(Number(progress.percent) || 0)} %.`);
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    logUpdater(
+      `Verzija ${info.version} je prenesena. Namestitev se izvede ob zaprtju aplikacije.`
+    );
+  });
+
+  autoUpdater.on('error', (error) => {
+    logUpdater('Napaka samodejne posodobitve.', error);
+  });
 }
 
 function startUpdates() {
-  if (!app.isPackaged) return;
-  const { owner, repo } = readUpdateConfig();
-  if (!owner || !repo || owner === 'CHANGE_ME' || repo === 'CHANGE_ME') {
-    console.warn('Samodejne posodobitve niso vključene: nastavi update-config.json ali release-config.js.');
-    return;
-  }
+  if (!app.isPackaged || updaterStarted) return;
+  updaterStarted = true;
 
-  autoUpdater.setFeedURL({ provider: 'github', owner, repo });
-  autoUpdater.logger = console;
+  /*
+   * Ne uporabljamo autoUpdater.setFeedURL().
+   * electron-builder v installer vgradi app-update.yml s pravilnim GitHub
+   * repozitorijem. Ročni setFeedURL lahko to konfiguracijo prepiše.
+   */
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
-  autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-    console.warn('Preverjanje posodobitev ni uspelo:', error.message);
-  });
+  autoUpdater.allowPrerelease = false;
+
+  configureUpdaterEvents();
+  logUpdater(`Updater zagnan. Trenutna verzija: ${app.getVersion()}.`);
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      logUpdater('Začetno preverjanje ni uspelo.', error);
+    });
+  }, 5000);
 
   setInterval(() => {
     autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-      console.warn('Preverjanje posodobitev ni uspelo:', error.message);
+      logUpdater('Periodično preverjanje ni uspelo.', error);
     });
   }, 60 * 60 * 1000);
 }
@@ -136,7 +189,9 @@ function startUpdates() {
 app.whenReady().then(() => {
   storage = createStorage(app.getPath('documents'), 'Depo Injekcije');
   registerIpc();
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false)
+  );
   createWindow();
   startUpdates();
 
