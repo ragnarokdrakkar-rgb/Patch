@@ -9,7 +9,7 @@
   "private": true,
   "repository": {
     "type": "git",
-    "url": "https://github.com/CHANGE_ME/CHANGE_ME.git"
+    "url": "https://github.com/ragnarokdrakkar-rgb/Patch.git"
   },
   "scripts": {
     "start": "electron .",
