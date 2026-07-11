@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +36,47 @@ jobs:
             throw "Tag v$tagVersion se ne ujema s package.json verzijo $packageVersion."
           }
 
-      - name: Build and publish release
-        run: npm run publish
+      - name: Build Windows installer
+        run: npm run make
+
+      - name: Verify release files
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $files = @(
+            "dist/Depo-Injekcije-PSA-Setup-$version.exe",
+            "dist/Depo-Injekcije-PSA-Setup-$version.exe.blockmap",
+            "dist/latest.yml"
+          )
+
+          foreach ($file in $files) {
+            if (-not (Test-Path $file)) {
+              throw "Manjka release datoteka: $file"
+            }
+          }
+
+      - name: Create or update GitHub release
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $assets = @(
+            "dist/Depo-Injekcije-PSA-Setup-$version.exe",
+            "dist/Depo-Injekcije-PSA-Setup-$version.exe.blockmap",
+            "dist/latest.yml"
+          )
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $tag že obstaja. Nalagam oziroma zamenjujem assets."
+            gh release upload $tag @assets --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            Write-Host "Ustvarjam release $tag."
+            gh release create $tag @assets `
+              --title $tag `
+              --generate-notes `
+              --repo $env:GITHUB_REPOSITORY
+          }
