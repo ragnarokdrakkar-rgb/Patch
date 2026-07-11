@@ -1,0 +1,28 @@
+{
+  "name": "depo-injekcije-psa",
+  "productName": "Depo Injekcije PSA",
+  "version": "2.0.3",
+  "description": "Windows aplikacija v7 za dve ambulanti; patch 2.0.3 za varno obnovo domače ambulante, konfliktna sporočila in bootstrap posodobitev brez novega installerja.",
+  "main": "main.js",
+  "author": "Kemal Jazavac",
+  "license": "UNLICENSED",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CHANGE_ME/CHANGE_ME.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-builder --config electron-builder.config.js --dir --win --x64",
+    "make": "electron-builder --config electron-builder.config.js --win nsis --x64",
+    "publish": "electron-builder --config electron-builder.config.js --win nsis --x64 --publish always",
+    "test": "node tests/storage.test.js && node tests/project.test.js && node tests/cloud-contract.test.js && node tests/apps-script.test.js && node --check main.js && node --check preload.js && node --check storage-core.js && node --check tools/configure-github.js && node --check electron-builder.config.js"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.3"
+  },
+  "devDependencies": {
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3"
+  }
+}

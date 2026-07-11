@@ -1,0 +1,12 @@
+POPRAVLJENA BUILD VERZIJA 2.0.1
+
+Ta projekt uporablja electron-builder + NSIS namesto Electron Forge/Squirrel,
+ker je Forge na nekaterih Windows racunalnikih obstal pri postPackage/postMake.
+
+1. Razsiri ZIP v novo mapo.
+2. Dvoklikni TESTIRAJ-APP.bat in preveri aplikacijo.
+3. Zapri aplikacijo.
+4. Dvoklikni USTVARI-EXE.bat.
+5. Installer bo v READY-EXE\Depo-Injekcije-PSA-Setup.exe.
+
+Podatki ostanejo v Dokumenti\Depo Injekcije in se pri odstranitvi aplikacije ne brisejo.

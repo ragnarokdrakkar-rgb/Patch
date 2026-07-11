@@ -1,0 +1,13 @@
+PATCH 2.0.3 - DEPLOY
+====================
+
+Ta mapa je celoten source za GitHub.
+
+1. Za prvi rocni prehod brez novega installerja uporabi ločen paket depo-injekcije-patch-2.0.3.zip.
+2. V source mapi zazeni NASTAVI-GITHUB.bat.
+3. Repo naj bo javen, ce uporabljas brezplacni GitHub updater.
+4. Zazeni DEPLOY-PATCH-2.0.3.bat.
+5. GitHub Actions izdela Release z installerjem, latest.yml in blockmap.
+6. Na obeh racunalnikih zazeni NASTAVI-POSODOBITVE.bat.
+
+Od patcha 2.0.3 naprej lahko prihodnje verzije izdajaj z IZDAJ-POSODOBITEV.bat.

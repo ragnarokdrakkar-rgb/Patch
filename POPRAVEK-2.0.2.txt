@@ -1,0 +1,7 @@
+POPRAVEK 2.0.2
+
+- Ob zagonu se vedno odpre domača ambulanta, ne zadnja tuja ambulanta.
+- Če lokalni homeAmbulantaId na strežniku ne obstaja, aplikacija ne zaklene uporabnika. Ponudi izbiro obstoječe ambulante.
+- Build uporablja pravo electron-builder konfiguracijo in robustno najde izdelani installer.
+
+Podatki v Dokumenti\Depo Injekcije ostanejo nespremenjeni.
