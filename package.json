@@ -1,8 +1,8 @@
 {
   "name": "depo-injekcije-psa",
   "productName": "Depo Injekcije PSA",
-  "version": "2.0.8",
-  "description": "Windows aplikacija v7 za ambulanti Medur in Koper; 2.0.7 popravi samodejne posodobitve in doda updater.log.",
+  "version": "2.0.9",
+  "description": "Windows aplikacija v7 za ambulanti Medur in Koper; 2.0.9 popravi fokus po potrditvenih oknih, termine in vidni updater ter odstrani telefon/SMS.",
   "main": "main.js",
   "author": "Kemal Jazavac",
   "license": "UNLICENSED",
@@ -16,7 +16,7 @@
     "package": "electron-builder --config electron-builder.config.js --dir --win --x64",
     "make": "electron-builder --config electron-builder.config.js --win nsis --x64",
     "publish": "electron-builder --config electron-builder.config.js --win nsis --x64 --publish always",
-    "test": "node tests/storage.test.js && node tests/project.test.js && node tests/cloud-contract.test.js && node tests/apps-script.test.js && node --check main.js && node --check preload.js && node --check storage-core.js && node --check tools/configure-github.js && node --check electron-builder.config.js"
+    "test": "node tests/storage.test.js && node tests/project.test.js && node tests/patch-2.0.9.test.js && node tests/cloud-contract.test.js && node tests/apps-script.test.js && node --check main.js && node --check preload.js && node --check storage-core.js && node --check tools/configure-github.js && node --check electron-builder.config.js"
   },
   "dependencies": {
     "electron-updater": "6.8.3"

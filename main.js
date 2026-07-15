@@ -8,6 +8,46 @@ let storage = null;
 let mainWindow = null;
 let updaterStarted = false;
 
+// PATCH_2_0_9_CLEAN: skupni most za fokus in vidni updater
+function sendRenderer(channel, payload) {
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (!mainWindow.webContents || mainWindow.webContents.isDestroyed()) return;
+    mainWindow.webContents.send(channel, payload);
+  } catch (_) {}
+}
+
+function sendUpdaterStatus(status) {
+  sendRenderer('updater:status', {
+    currentVersion: app.getVersion(),
+    timestamp: new Date().toISOString(),
+    ...status,
+  });
+}
+
+function refocusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const restore = () => {
+    try {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      if (mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.focus();
+      }
+    } catch (_) {}
+  };
+
+  // Chromium/Electron na Windows lahko po native confirm/alert/prompt izgubi fokus.
+  if (process.platform === 'win32') {
+    try { mainWindow.blur(); } catch (_) {}
+    setTimeout(restore, 25);
+    setTimeout(restore, 140);
+  } else {
+    restore();
+  }
+}
+
 function updaterLogPath() {
   return path.join(app.getPath('documents'), 'Depo Injekcije', 'updater.log');
 }
@@ -74,6 +114,34 @@ function registerIpc() {
     const error = await shell.openPath(paths.root);
     return error ? { ok: false, error } : { ok: true, path: paths.root };
   });
+
+  ipcMain.on('window:refocus', () => {
+    refocusMainWindow();
+  });
+
+  ipcMain.on('updater:check', () => {
+    if (!app.isPackaged) {
+      sendUpdaterStatus({
+        state: 'development',
+        message: 'Preverjanje posodobitev deluje v nameščeni EXE različici.',
+      });
+      return;
+    }
+    autoUpdater.checkForUpdatesAndNotify().catch((error) => {
+      logUpdater('Ročno preverjanje ni uspelo.', error);
+      sendUpdaterStatus({ state: 'error', message: error.message || String(error) });
+    });
+  });
+
+  ipcMain.on('updater:install', () => {
+    if (!app.isPackaged) return;
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (error) {
+      logUpdater('Namestitev prenesene posodobitve ni uspela.', error);
+      sendUpdaterStatus({ state: 'error', message: error.message || String(error) });
+    }
+  });
 }
 
 function createWindow() {
@@ -98,6 +166,9 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.webContents.on('did-finish-load', () => {
+    sendUpdaterStatus({ state: 'idle' });
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url === 'about:blank') {
@@ -132,28 +203,40 @@ function createWindow() {
 function configureUpdaterEvents() {
   autoUpdater.on('checking-for-update', () => {
     logUpdater('Preverjam posodobitve.');
+    sendUpdaterStatus({ state: 'checking' });
   });
 
   autoUpdater.on('update-available', (info) => {
     logUpdater(`Na voljo je verzija ${info.version}.`);
+    sendUpdaterStatus({ state: 'available', version: info.version });
   });
 
   autoUpdater.on('update-not-available', (info) => {
     logUpdater(`Ni nove posodobitve. Trenutna/latest verzija: ${info.version}.`);
+    sendUpdaterStatus({ state: 'not-available', version: info.version });
   });
 
   autoUpdater.on('download-progress', (progress) => {
-    logUpdater(`Prenos: ${Math.round(Number(progress.percent) || 0)} %.`);
+    const percent = Math.round(Number(progress.percent) || 0);
+    logUpdater(`Prenos: ${percent} %.`);
+    sendUpdaterStatus({
+      state: 'downloading',
+      percent,
+      transferred: Number(progress.transferred) || 0,
+      total: Number(progress.total) || 0,
+    });
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     logUpdater(
       `Verzija ${info.version} je prenesena. Namestitev se izvede ob zaprtju aplikacije.`
     );
+    sendUpdaterStatus({ state: 'downloaded', version: info.version });
   });
 
   autoUpdater.on('error', (error) => {
     logUpdater('Napaka samodejne posodobitve.', error);
+    sendUpdaterStatus({ state: 'error', message: error.message || String(error) });
   });
 }
 

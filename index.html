@@ -149,6 +149,21 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
 #toast.show{transform:translateY(0);opacity:1;}
 #toast.success{background:var(--accent);}
 #toast.error{background:var(--danger);}
+
+/* PATCH_2_0_9_CLEAN: vidno okno samodejne posodobitve */
+.update-panel{display:none;position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:1400;width:min(560px,calc(100vw - 28px));background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 10px 36px rgba(0,0,0,.25);padding:16px 18px;}
+.update-panel.show{display:block;}
+.update-panel-head{display:flex;align-items:flex-start;gap:12px;}
+.update-panel-icon{font-size:1.5rem;line-height:1;}
+.update-panel-content{flex:1;min-width:0;}
+.update-panel-title{font-weight:700;font-size:.94rem;}
+.update-panel-text{font-size:.82rem;color:var(--text2);margin-top:3px;overflow-wrap:anywhere;}
+.update-progress{height:8px;background:var(--surface2);border-radius:999px;overflow:hidden;margin-top:11px;display:none;}
+.update-progress.show{display:block;}
+.update-progress-bar{height:100%;width:0;background:var(--accent2);transition:width .2s ease;}
+.update-panel-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap;}
+.update-panel-close{border:0;background:transparent;color:var(--text2);font-size:1.1rem;cursor:pointer;padding:1px 5px;}
+
 @media(max-width:768px){
   main{padding:16px;}
   .dash-grid{grid-template-columns:repeat(2,1fr);}
@@ -256,7 +271,7 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
     <p style="font-size:.84rem;color:var(--text2);margin-bottom:12px">Termini s preteklim datumom, ki čakajo. Za vsakega: <strong>✅ Potrdi</strong> (pacient je prišel — vnesi pravi datum), <strong>📅 Prestavi</strong> (nov datum), ali <strong>✕ Prekliči</strong> (pacient ne bo prišel).</p>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Zamuda</th><th>Datum</th><th>Pacient</th><th>Telefon</th><th>Zdravilo</th><th>Akcije</th></tr></thead>
+        <thead><tr><th>Zamuda</th><th>Datum</th><th>Pacient</th><th>Zdravilo</th><th>Akcije</th></tr></thead>
         <tbody id="zamudeTable"></tbody>
       </table>
     </div>
@@ -462,8 +477,9 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
   </div>
   <div class="card">
     <div class="card-title">ℹ️ O aplikaciji</div>
-    <p style="font-size:.86rem;color:var(--text2)">Verzija: <strong id="appVersionLabel" style="color:var(--text)"></strong><br>
-    Posodobitve se prenesejo samodejno iz GitHub — ko je nova verzija na voljo, se pojavi gumb "Posodobi" na dnu zaslona.</p>
+    <p style="font-size:.86rem;color:var(--text2);margin-bottom:12px">Verzija: <strong id="appVersionLabel" style="color:var(--text)"></strong><br>
+    Aplikacija prikaže preverjanje, napredek prenosa, napako in gumb za namestitev nove verzije.</p>
+    <button class="btn btn-secondary btn-sm" onclick="manualUpdateCheck()">🔄 Preveri posodobitve</button>
   </div>
   <div class="card">
     <div class="card-title">⚠️ Nevarno območje</div>
@@ -481,9 +497,9 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
       <div class="form-group"><label>Ime</label><input type="text" id="pIme" style="width:100%" placeholder="Ime"></div>
       <div class="form-group"><label>Priimek</label><input type="text" id="pPriimek" style="width:100%" placeholder="Priimek"></div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Matični indeks</label><input type="text" id="pMaticni" style="width:100%" placeholder="npr. 1234567"></div>
-      <div class="form-group"><label>Telefon <span style="color:var(--text2);font-weight:400">(za opomnike)</span></label><input type="tel" id="pTelefon" style="width:100%" placeholder="041 123 456"></div>
+    <div class="form-group">
+      <label>Matični indeks</label>
+      <input type="text" id="pMaticni" style="width:100%" placeholder="npr. 1234567">
     </div>
     <div class="form-group">
       <label>Zdravilo + odmerek</label>
@@ -816,6 +832,24 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
   </div>
 </div>
 
+<div class="update-panel" id="desktopUpdaterPanel" role="status" aria-live="polite">
+  <div class="update-panel-head">
+    <div class="update-panel-icon" id="updaterIcon">🔄</div>
+    <div class="update-panel-content">
+      <div class="update-panel-title" id="updaterTitle">Posodobitev aplikacije</div>
+      <div class="update-panel-text" id="updaterText"></div>
+      <div class="update-progress" id="updaterProgress">
+        <div class="update-progress-bar" id="updaterProgressBar"></div>
+      </div>
+    </div>
+    <button class="update-panel-close" onclick="hideUpdaterPanel()" title="Skrij">✕</button>
+  </div>
+  <div class="update-panel-actions">
+    <button class="btn btn-secondary btn-sm" id="updaterCheckBtn" onclick="manualUpdateCheck()" style="display:none">Preveri znova</button>
+    <button class="btn btn-primary btn-sm" id="updaterInstallBtn" onclick="installDownloadedUpdate()" style="display:none">Zapri in namesti</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -868,6 +902,25 @@ function zalogeKey(zdravilo,odmerek){return zdravilo+'||'+(odmerek||'');}
 
 // Unique ID generator — preprečuje kolizije
 function newId(prefix){return prefix+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8);}
+
+// PATCH_2_0_9_CLEAN: Chromium/Electron Windows focus guard za native dialoge
+const _nativeDialogConfirm=window.confirm.bind(window);
+const _nativeDialogAlert=window.alert.bind(window);
+const _nativeDialogPrompt=window.prompt.bind(window);
+function restoreDesktopFocus(){
+  const refocus=()=>{
+    try{
+      if(window.desktopStorage&&typeof window.desktopStorage.refocusWindow==='function')window.desktopStorage.refocusWindow();
+      else window.focus();
+    }catch(e){try{window.focus();}catch(_){}}
+  };
+  setTimeout(refocus,0);
+  setTimeout(refocus,80);
+  setTimeout(refocus,220);
+}
+window.confirm=function(...args){try{return _nativeDialogConfirm(...args);}finally{restoreDesktopFocus();}};
+window.alert=function(...args){try{return _nativeDialogAlert(...args);}finally{restoreDesktopFocus();}};
+window.prompt=function(...args){try{return _nativeDialogPrompt(...args);}finally{restoreDesktopFocus();}};
 
 // Pacient/termin lookup s pravilno tip-konverzijo
 function getP(id){return data.pacienti.find(x=>x.id===Number(id));}
@@ -2198,7 +2251,7 @@ function renderDashboard(){
       const psaCell=p?`<span style="cursor:pointer" onclick="openPsaHistory('${p.id}')" title="PSA zgodovina">${psaSparkline(p,70,24)}</span> ${psaBadge(p)}`:'—';
       return`<tr style="${done?'opacity:.5':''}">
         <td><strong>${esc(t.ura||'—')}</strong></td>
-        <td><strong>${p?esc(p.ime+' '+p.priimek):'?'}</strong>${p&&p.telefon?` <a href="tel:${String(p.telefon||'').replace(/[^\d+]/g,'')}" style="font-size:.78rem;color:var(--info)">📞</a>`:''}</td>
+        <td><strong>${p?esc(p.ime+' '+p.priimek):'?'}</strong></td>
         <td>${isK?'—':esc((t.zdravilo||'')+' '+(t.odmerek||'')+'mg')}</td>
         <td>${psaCell}</td>
         <td>${isK?'<span class="badge-purple">🩺 Kontrola</span>':'<span class="badge-blue">💉 Injekcija</span>'}</td>
@@ -2310,13 +2363,13 @@ function renderPacienti(){
         const brezKon=p.zadnjaKontrola&&(today-new Date(p.zadnjaKontrola))/86400000>183;
         const arhBadge=p.izbrisan?' <span class="badge-gray" style="margin-left:4px">📦 arhiv</span>':'';
         return`<tr${p.izbrisan?' style="opacity:.55"':''}>
-          <td><div style="display:flex;align-items:center;gap:8px"><div><strong>${esc(p.ime)} ${esc(p.priimek)}</strong> ${psaBadge(p)}${arhBadge}${p.telefon?`<br><a href="tel:${String(p.telefon||'').replace(/[^\d+]/g,'')}" style="font-size:.75rem;color:var(--info)">📞 ${esc(p.telefon)}</a>`:''}${p.opombe?`<br><span style="font-size:.75rem;color:var(--text2)">${esc(p.opombe)}</span>`:''}</div>
+          <td><div style="display:flex;align-items:center;gap:8px"><div><strong>${esc(p.ime)} ${esc(p.priimek)}</strong> ${psaBadge(p)}${arhBadge}${p.opombe?`<br><span style="font-size:.75rem;color:var(--text2)">${esc(p.opombe)}</span>`:''}</div>
             <span style="cursor:pointer;margin-left:auto" onclick="openPsaHistory('${p.id}')" title="PSA zgodovina">${psaSparkline(p)}</span></div></td>
           <td><span style="font-family:monospace">${esc(p.maticni)||"—"}</span></td>
           <td>${esc(p.zdravilo||'')}<br><span style="font-size:.75rem;color:var(--text2)">${esc(p.odmerek||'')}mg</span></td>
           <td>${p.interval} dni</td>
           <td>${p.zadnjaInjekcija?fmtDate(p.zadnjaInjekcija):'<span style="color:var(--text2)">—</span>'}</td>
-          <td>${nextT?`<strong>${fmtDate(nextT.datum)}</strong> ${esc(nextT.ura||'')}${p.telefon?' '+smsBtn(p,nextT):''}`:'<span style="color:var(--text2)">—</span>'}</td>
+          <td>${nextT?`<strong>${fmtDate(nextT.datum)}</strong> ${esc(nextT.ura||'')}`:'<span style="color:var(--text2)">—</span>'}</td>
           <td>${nextK?`<strong>${fmtDate(nextK.datum)}</strong>`:p.zadnjaKontrola?fmtDate(p.zadnjaKontrola):'<span style="color:var(--text2)">—</span>'}
             ${brezKon&&p.status==='aktiven'?'<div class="kontrola-warn">⚠ Potrebuje!</div>':''}</td>
           <td><span class="badge-${p.status==='aktiven'?'green':'gray'}">${esc(p.status||'')}</span></td>
@@ -2392,20 +2445,49 @@ function updatePacientDateMode(){
 }
 function getPendingInjections(pacientId){return clinicTermini().filter(t=>t.pacientId===Number(pacientId)&&t.status==='caka'&&t.tip!=='kontrola');}
 function reschedulePendingInjection(p,fromDate,reason){
-  const pending=getPendingInjections(p.id);
+  const pending=getPendingInjections(p.id).sort((a,b)=>a.datum.localeCompare(b.datum)||(a.ura||'').localeCompare(b.ura||''));
   const snapshots=pending.map(t=>({t,status:t.status,opomba:t.opomba}));
+  // Med iskanjem novega slota stari termini ne smejo zasedati kapacitete.
   pending.forEach(t=>t.status='preklican');
   const slot=getNextSlot(fromDate,{maxDays:365});
-  if(!slot){snapshots.forEach(x=>{x.t.status=x.status;x.t.opomba=x.opomba;});return null;}
-  snapshots.forEach(x=>{x.t.status='preklican';x.t.opomba=(x.opomba?x.opomba+' · ':'')+(reason||'ponovno izračunan termin');});
+  if(!slot){
+    snapshots.forEach(x=>{x.t.status=x.status;x.t.opomba=x.opomba;});
+    return null;
+  }
+
+  if(pending.length){
+    const keep=pending[0];
+    const removedIds=new Set(pending.slice(1).map(t=>String(t.id)));
+    keep.ambulantaId=activeAmbulantaId;
+    keep.zdravilo=p.zdravilo;
+    keep.odmerek=p.odmerek;
+    keep.datum=slot.datum;
+    keep.ura=slot.ura;
+    keep.status='caka';
+    keep.tip='injekcija';
+    keep.opomba=reason||'';
+
+    if(removedIds.size){
+      data.termini=data.termini.filter(t=>!removedIds.has(String(t.id)));
+      data.termini.forEach(t=>{
+        if(t.nextTerminId&&removedIds.has(String(t.nextTerminId)))t.nextTerminId=keep.id;
+        if(Array.isArray(t.preklicaniObPotrditvi)){
+          t.preklicaniObPotrditvi=t.preklicaniObPotrditvi.filter(id=>!removedIds.has(String(id)));
+        }
+      });
+    }
+    return keep;
+  }
+
   const nt={id:newId('t'),pacientId:p.id,ambulantaId:activeAmbulantaId,zdravilo:p.zdravilo,odmerek:p.odmerek,datum:slot.datum,ura:slot.ura,status:'caka',tip:'injekcija',opomba:reason||''};
-  data.termini.push(nt);return nt;
+  data.termini.push(nt);
+  return nt;
 }
 function openAddPacient(){
   editingId=null;
   document.getElementById('modalPacientTitle').textContent='Dodaj pacienta';
   document.getElementById('btnBrisiPacienta').style.display='none';
-  ['pIme','pPriimek','pMaticni','pTelefon','pOpombe','pNovoZdraviloIme','pNovoZdraviloOdmerek'].forEach(id=>document.getElementById(id).value='');
+  ['pIme','pPriimek','pMaticni','pOpombe','pNovoZdraviloIme','pNovoZdraviloOdmerek'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('pNovoZdraviloInterval').value=90;
   document.getElementById('pInterval').value=90;
   document.getElementById('pStatus').value='aktiven';
@@ -2425,7 +2507,7 @@ function openEditPacient(id){
   document.getElementById('modalPacientTitle').textContent='Uredi pacienta';
   document.getElementById('btnBrisiPacienta').style.display='inline-flex';
   document.getElementById('pIme').value=p.ime||'';document.getElementById('pPriimek').value=p.priimek||'';
-  document.getElementById('pMaticni').value=p.maticni||'';document.getElementById('pTelefon').value=p.telefon||'';
+  document.getElementById('pMaticni').value=p.maticni||'';
   document.getElementById('pOpombe').value=p.opombe||'';document.getElementById('pInterval').value=p.interval||90;
   document.getElementById('pStatus').value=p.status||'aktiven';
   const pending=getPendingInjections(p.id).sort((a,b)=>a.datum.localeCompare(b.datum)||(a.ura||'').localeCompare(b.ura||''))[0];
@@ -2469,7 +2551,7 @@ function savePacient(){
   const status=document.getElementById('pStatus').value;
   const stari=editingId?getP(editingId):null;
   const zadnjaInjekcija=datumTip==='zadnja'?vnesenDatum:(stari?stari.zadnjaInjekcija||'':'');
-  const pacData={ime,priimek,maticni,telefon:document.getElementById('pTelefon').value.trim(),zdravilo,odmerek,interval:intervalNum,status,zadnjaInjekcija,zadnjaKontrola:document.getElementById('pZadnjaKontrola').value||'',psaIntervalMeseci:parseInt(document.getElementById('pPsaInterval').value)||6,zdravljenje:document.getElementById('pZdravljenje').value||'neznano',opombe:document.getElementById('pOpombe').value.trim()};
+  const pacData={ime,priimek,maticni,zdravilo,odmerek,interval:intervalNum,status,zadnjaInjekcija,zadnjaKontrola:document.getElementById('pZadnjaKontrola').value||'',psaIntervalMeseci:parseInt(document.getElementById('pPsaInterval').value)||6,zdravljenje:document.getElementById('pZdravljenje').value||'neznano',opombe:document.getElementById('pOpombe').value.trim()};
   const zk=zalogeKey(zdravilo,odmerek);if(data.zaloge[zk]===undefined)data.zaloge[zk]=0;
 
   if(stari){
@@ -3032,7 +3114,8 @@ function renderTermini(){
             ${t.status==='caka'?`<button class="btn btn-primary btn-sm" onclick="openPrestavi('${t.id}')" title="Prestavi">📅</button>`:''}
             ${lahkoRazveljavi(t)?`<button class="btn btn-secondary btn-sm" onclick="razveljaviPotrditev('${t.id}')" title="Razveljavi potrditev">↩</button>`:''}
             ${!isK&&t.status!=='preklican'?`<button class="btn btn-secondary btn-sm" onclick="printSlip('${t.id}')">🖨</button>`:''}
-            ${t.status==='caka'?`<button class="btn btn-danger btn-sm" onclick="preklicanTermin('${t.id}')">✕</button>`:''}
+            ${t.status==='caka'?`<button class="btn btn-danger btn-sm" onclick="preklicanTermin('${t.id}')" title="Prekliči">✕</button>`:''}
+            ${t.status!=='opravljeno'?`<button class="btn btn-danger btn-sm" onclick="odstraniNapacenTermin('${t.id}')" title="Odstrani napačen termin">🗑</button>`:''}
           </td></tr>`;
       }).join('')
     :'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text2)">'+(iskanje?'Ni terminov za to iskanje':'Ni terminov ta teden')+'</td></tr>';
@@ -3050,6 +3133,28 @@ function preklicanTermin(id){
   if(!confirm(msg))return;
   t.status='preklican';
   save();renderTermini();updateUrejanjeBadge();showToast('Termin preklican','error');
+}
+function odstraniNapacenTermin(id){
+  const t=data.termini.find(x=>x.id===id);
+  if(!t)return;
+  if(t.status==='opravljeno'){
+    showToast('Opravljenega termina ni mogoče odstraniti. Uporabi razveljavitev potrditve.','error');
+    return;
+  }
+  const p=getP(t.pacientId);
+  const name=p?`${p.ime} ${p.priimek}`:'pacienta';
+  if(!confirm(`Trajno odstraniti napačen termin za ${name} (${fmtDate(t.datum)} ${t.ura||''})?\n\nPacient in opravljena zgodovina ostaneta nespremenjena.`))return;
+  data.termini=data.termini.filter(x=>x.id!==id);
+  data.termini.forEach(x=>{
+    if(x.nextTerminId===id)delete x.nextTerminId;
+    if(Array.isArray(x.preklicaniObPotrditvi))x.preklicaniObPotrditvi=x.preklicaniObPotrditvi.filter(v=>v!==id);
+  });
+  save();
+  renderTermini();
+  renderDashboard();
+  updateUrejanjeBadge();
+  if(document.getElementById('page-urejanje').classList.contains('active'))renderUrejanje();
+  showToast('Napačen termin odstranjen ✓','success');
 }
 
 function printWeek(){
@@ -3813,7 +3918,6 @@ function renderUrejanje(){
           <td style="color:${sevColor};font-weight:700">${dni} dni</td>
           <td>${fmtDate(t.datum)}</td>
           <td><strong>${p?esc(p.priimek+' '+p.ime):'?'}</strong></td>
-          <td>${p&&p.telefon?`<a href="tel:${String(p.telefon||'').replace(/[^\d+]/g,'')}" style="color:var(--info)">${esc(p.telefon)}</a> ${smsBtn(p,t)}`:'<span style="color:var(--text2)">—</span>'}</td>
           <td>${esc((t.zdravilo||'')+' '+(t.odmerek||'')+'mg')}</td>
           <td style="white-space:nowrap">
             <button class="btn btn-success btn-sm" onclick="openPotrdi('${t.id}')" title="Pacient je prišel — vnesi pravi datum">✅ Potrdi</button>
@@ -3821,7 +3925,7 @@ function renderUrejanje(){
             <button class="btn btn-danger btn-sm" onclick="preklicZamude('${t.id}')" title="Prekliči">✕</button>
           </td></tr>`;
       }).join('')
-    :'<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--accent)">✅ Ni zamujenih terminov</td></tr>';
+    :'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--accent)">✅ Ni zamujenih terminov</td></tr>';
 }
 
 function razpisiTermin(pacientId){
@@ -3899,20 +4003,6 @@ function confirmPrestavi(){
 }
 
 // ============================================================
-// SMS / OPOMNIKI
-// ============================================================
-function smsText(p,t){
-  const ord=data.settings.ordinacija||'ordinacija';
-  return`Spoštovani, obveščamo vas o terminu za injekcijo: ${fmtDate(t.datum)}${t.ura?' ob '+esc(t.ura):''}. Lep pozdrav, ${ord}`;
-}
-function smsBtn(p,t){
-  if(!p||!p.telefon)return'';
-  const tel=String(p.telefon||'').replace(/[^\d+]/g,'');
-  const body=encodeURIComponent(smsText(p,t));
-  return`<a class="btn btn-secondary btn-sm" style="padding:2px 8px" href="sms:${tel}?body=${body}" title="Pošlji SMS opomnik">📱</a>`;
-}
-
-// ============================================================
 // QUICK SEARCH (Ctrl+K)
 // ============================================================
 function openQuickSearch(){
@@ -3954,6 +4044,101 @@ document.addEventListener('keydown',e=>{
     if(first)first.click();
   }
 });
+
+// ============================================================
+// PATCH_2_0_9_CLEAN: VIDNI DESKTOP UPDATER
+// ============================================================
+let updaterHideTimer=null;
+function updaterElements(){
+  return{
+    panel:document.getElementById('desktopUpdaterPanel'),
+    icon:document.getElementById('updaterIcon'),
+    title:document.getElementById('updaterTitle'),
+    text:document.getElementById('updaterText'),
+    progress:document.getElementById('updaterProgress'),
+    bar:document.getElementById('updaterProgressBar'),
+    check:document.getElementById('updaterCheckBtn'),
+    install:document.getElementById('updaterInstallBtn')
+  };
+}
+function hideUpdaterPanel(){
+  const el=updaterElements();
+  if(el.panel)el.panel.classList.remove('show');
+}
+function showUpdaterPanel(){
+  const el=updaterElements();
+  if(el.panel)el.panel.classList.add('show');
+}
+function scheduleUpdaterHide(ms=4500){
+  clearTimeout(updaterHideTimer);
+  updaterHideTimer=setTimeout(hideUpdaterPanel,ms);
+}
+function renderUpdaterStatus(status){
+  if(!status||!isDesktopApp())return;
+  const el=updaterElements();
+  if(!el.panel)return;
+  clearTimeout(updaterHideTimer);
+  el.progress.classList.remove('show');
+  el.bar.style.width='0%';
+  el.check.style.display='none';
+  el.install.style.display='none';
+  showUpdaterPanel();
+
+  const state=status.state||'idle';
+  if(state==='idle'){hideUpdaterPanel();return;}
+  if(state==='checking'){
+    el.icon.textContent='🔎';el.title.textContent='Preverjam posodobitve …';el.text.textContent='Povezujem se z GitHub Releases.';
+    return;
+  }
+  if(state==='available'){
+    el.icon.textContent='⬇️';el.title.textContent='Na voljo je verzija '+(status.version||'');el.text.textContent='Prenos se začenja samodejno.';
+    return;
+  }
+  if(state==='downloading'){
+    const percent=Math.max(0,Math.min(100,Number(status.percent)||0));
+    el.icon.textContent='⬇️';el.title.textContent='Prenašam posodobitev: '+percent+' %';el.text.textContent='Aplikacijo lahko med prenosom normalno uporabljaš.';
+    el.progress.classList.add('show');el.bar.style.width=percent+'%';
+    return;
+  }
+  if(state==='downloaded'){
+    el.icon.textContent='✅';el.title.textContent='Posodobitev '+(status.version||'')+' je pripravljena';el.text.textContent='Namesti jo zdaj ali zapri aplikacijo pozneje; namestila se bo ob izhodu.';
+    el.install.style.display='inline-flex';
+    return;
+  }
+  if(state==='not-available'){
+    el.icon.textContent='✅';el.title.textContent='Aplikacija je posodobljena';el.text.textContent='Trenutna verzija je najnovejša.';
+    el.check.style.display='inline-flex';scheduleUpdaterHide();
+    return;
+  }
+  if(state==='development'){
+    el.icon.textContent='ℹ️';el.title.textContent='Razvojni zagon';el.text.textContent=status.message||'Updater se preverja v nameščeni EXE različici.';
+    el.check.style.display='inline-flex';scheduleUpdaterHide(6500);
+    return;
+  }
+  if(state==='error'){
+    el.icon.textContent='⚠️';el.title.textContent='Napaka pri posodobitvi';el.text.textContent=status.message||'Preveri internetno povezavo in updater.log.';
+    el.check.style.display='inline-flex';
+    return;
+  }
+}
+function initUpdaterUi(){
+  if(!isDesktopApp()||!window.desktopStorage||typeof window.desktopStorage.onUpdaterStatus!=='function')return;
+  window.desktopStorage.onUpdaterStatus(renderUpdaterStatus);
+}
+function manualUpdateCheck(){
+  if(!isDesktopApp()||!window.desktopStorage||typeof window.desktopStorage.checkForUpdates!=='function'){
+    showToast('Preverjanje posodobitev je na voljo v namizni EXE aplikaciji.','error');
+    return;
+  }
+  renderUpdaterStatus({state:'checking'});
+  window.desktopStorage.checkForUpdates();
+}
+function installDownloadedUpdate(){
+  if(window.desktopStorage&&typeof window.desktopStorage.installUpdate==='function'){
+    window.desktopStorage.installUpdate();
+  }
+}
+
 // ============================================================
 // PWA — verzija, service worker, samodejne posodobitve
 // ============================================================
@@ -4004,6 +4189,7 @@ function applyUpdate(){
 document.getElementById('prestaviDatum').addEventListener('change',updatePrestaviSlotInfo);document.getElementById('prestaviUra').addEventListener('change',updatePrestaviSlotInfo);
 async function initializeApplication(){
   setupDesktopStorageUi();
+  initUpdaterUi();
   initializeClinicContext();
   await startAutoSync(false);
   // Cloud pull lahko prinese ambulante, zato kontekst po sinhronizaciji ponovno preverimo.

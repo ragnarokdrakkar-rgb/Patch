@@ -9,4 +9,11 @@ contextBridge.exposeInMainWorld('desktopStorage', {
   loadDeviceSettings: () => ipcRenderer.sendSync('device-settings:load-sync'),
   saveDeviceSettings: (value) => ipcRenderer.sendSync('device-settings:save-sync', value),
   openFolder: () => ipcRenderer.invoke('storage:open-folder'),
+  refocusWindow: () => ipcRenderer.send('window:refocus'),
+  checkForUpdates: () => ipcRenderer.send('updater:check'),
+  installUpdate: () => ipcRenderer.send('updater:install'),
+  onUpdaterStatus: (callback) => {
+    if (typeof callback !== 'function') return;
+    ipcRenderer.on('updater:status', (_event, status) => callback(status));
+  },
 });
