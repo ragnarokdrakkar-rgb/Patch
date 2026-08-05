@@ -11,7 +11,7 @@ const main = fs.readFileSync(path.join(root, 'main.js'), 'utf8');
 const preload = fs.readFileSync(path.join(root, 'preload.js'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
-assert.equal(pkg.version, '2.0.9');
+assert.ok(['2.0.9','2.0.10'].includes(pkg.version), 'Regresijski test 2.0.9 mora delovati tudi v 2.0.10.');
 assert.match(html, /PATCH_2_0_9_CLEAN/, 'Manjka marker čistega patcha.');
 assert.doesNotMatch(html, /id="pTelefon"/, 'Telefonsko polje ne sme biti prikazano.');
 assert.doesNotMatch(html, /smsBtn\s*\(/, 'SMS funkcija ne sme obstajati.');

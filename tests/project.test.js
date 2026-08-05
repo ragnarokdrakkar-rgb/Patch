@@ -46,7 +46,7 @@ assert.doesNotMatch(
 );
 assert.match(
   main,
-  /checkForUpdatesAndNotify/,
+  /checkForUpdates\s*\(/,
   'Main proces ne preverja samodejnih posodobitev.'
 );
 assert.match(

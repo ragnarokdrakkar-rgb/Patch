@@ -20,6 +20,7 @@ module.exports = {
     'main.js',
     'preload.js',
     'storage-core.js',
+    'rollback-core.js',
     'release-config.js',
     'package.json',
     'assets/**/*'

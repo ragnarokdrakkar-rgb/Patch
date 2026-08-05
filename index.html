@@ -478,8 +478,17 @@ body.clinic-readonly .readonly-dim{opacity:.55;}
   <div class="card">
     <div class="card-title">ℹ️ O aplikaciji</div>
     <p style="font-size:.86rem;color:var(--text2);margin-bottom:12px">Verzija: <strong id="appVersionLabel" style="color:var(--text)"></strong><br>
-    Aplikacija prikaže preverjanje, napredek prenosa, napako in gumb za namestitev nove verzije.</p>
+    Posodobitve se preverjajo tiho v ozadju. Okno se pokaže samo, ko je nova verzija na voljo, ali ko preverjanje zaženeš ročno.</p>
     <button class="btn btn-secondary btn-sm" onclick="manualUpdateCheck()">🔄 Preveri posodobitve</button>
+  </div>
+  <div class="card" id="rollbackCard">
+    <div class="card-title">🛡️ Varna povrnitev verzije</div>
+    <p style="font-size:.86rem;color:var(--text2);margin-bottom:12px">
+      Pred prenosom nove verzije se shranijo prejšnji installer in kopije podatkov. Na namizju je samostojen zaganjalnik
+      <strong>Depo Injekcije - Povrni prejsnjo verzijo</strong>, ki deluje tudi, če se aplikacija ne odpre.
+    </p>
+    <div id="rollbackStatus" style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;font-size:.82rem">Pripravljam stanje …</div>
+    <button class="btn btn-secondary btn-sm" onclick="openRollbackFolder()">📁 Odpri mapo Rollback</button>
   </div>
   <div class="card">
     <div class="card-title">⚠️ Nevarno območje</div>
@@ -4046,7 +4055,7 @@ document.addEventListener('keydown',e=>{
 });
 
 // ============================================================
-// PATCH_2_0_9_CLEAN: VIDNI DESKTOP UPDATER
+// PATCH_2_0_10_SAFE_UPDATE: TIHI UPDATER + VAREN ROLLBACK
 // ============================================================
 let updaterHideTimer=null;
 function updaterElements(){
@@ -4075,6 +4084,16 @@ function scheduleUpdaterHide(ms=4500){
 }
 function renderUpdaterStatus(status){
   if(!status||!isDesktopApp())return;
+  const state=status.state||'idle';
+  const manual=Boolean(status.manual);
+  const visible=Boolean(status.visible);
+
+  // Samodejno preverjanje je popolnoma tiho, kadar ni nove verzije.
+  if(state==='idle'||(state==='checking'&&!manual)||(state==='not-available'&&!manual)||(state==='error'&&!manual&&!visible)){
+    hideUpdaterPanel();
+    return;
+  }
+
   const el=updaterElements();
   if(!el.panel)return;
   clearTimeout(updaterHideTimer);
@@ -4084,41 +4103,62 @@ function renderUpdaterStatus(status){
   el.install.style.display='none';
   showUpdaterPanel();
 
-  const state=status.state||'idle';
-  if(state==='idle'){hideUpdaterPanel();return;}
   if(state==='checking'){
-    el.icon.textContent='🔎';el.title.textContent='Preverjam posodobitve …';el.text.textContent='Povezujem se z GitHub Releases.';
+    el.icon.textContent='🔎';
+    el.title.textContent='Preverjam posodobitve …';
+    el.text.textContent='Ročno preverjanje GitHub Releases.';
     return;
   }
   if(state==='available'){
-    el.icon.textContent='⬇️';el.title.textContent='Na voljo je verzija '+(status.version||'');el.text.textContent='Prenos se začenja samodejno.';
+    el.icon.textContent=status.phase==='rollback'?'🛡️':'⬇️';
+    el.title.textContent='Na voljo je verzija '+(status.version||'');
+    el.text.textContent=status.message||(status.phase==='rollback'?'Pripravljam varno povrnitev trenutne verzije.':'Prenos se začenja.');
     return;
   }
   if(state==='downloading'){
     const percent=Math.max(0,Math.min(100,Number(status.percent)||0));
-    el.icon.textContent='⬇️';el.title.textContent='Prenašam posodobitev: '+percent+' %';el.text.textContent='Aplikacijo lahko med prenosom normalno uporabljaš.';
-    el.progress.classList.add('show');el.bar.style.width=percent+'%';
+    el.icon.textContent='⬇️';
+    el.title.textContent='Prenašam posodobitev: '+percent+' %';
+    el.text.textContent='Varna povrnitev je že shranjena. Aplikacijo lahko uporabljaš naprej.';
+    el.progress.classList.add('show');
+    el.bar.style.width=percent+'%';
     return;
   }
   if(state==='downloaded'){
-    el.icon.textContent='✅';el.title.textContent='Posodobitev '+(status.version||'')+' je pripravljena';el.text.textContent='Namesti jo zdaj ali zapri aplikacijo pozneje; namestila se bo ob izhodu.';
+    el.icon.textContent='✅';
+    el.title.textContent='Posodobitev '+(status.version||'')+' je pripravljena';
+    el.text.textContent='Namesti jo zdaj ali zapri aplikacijo pozneje. Prejšnja verzija je shranjena za rollback.';
     el.install.style.display='inline-flex';
     return;
   }
   if(state==='not-available'){
-    el.icon.textContent='✅';el.title.textContent='Aplikacija je posodobljena';el.text.textContent='Trenutna verzija je najnovejša.';
-    el.check.style.display='inline-flex';scheduleUpdaterHide();
+    el.icon.textContent='✅';
+    el.title.textContent='Aplikacija je posodobljena';
+    el.text.textContent='Trenutna verzija je najnovejša.';
+    el.check.style.display='inline-flex';
+    scheduleUpdaterHide();
+    return;
+  }
+  if(state==='blocked'){
+    el.icon.textContent='🛡️';
+    el.title.textContent='Posodobitev '+(status.version||'')+' je blokirana';
+    el.text.textContent=status.message||'Ta verzija je bila označena kot pokvarjena.';
+    el.check.style.display='inline-flex';
     return;
   }
   if(state==='development'){
-    el.icon.textContent='ℹ️';el.title.textContent='Razvojni zagon';el.text.textContent=status.message||'Updater se preverja v nameščeni EXE različici.';
-    el.check.style.display='inline-flex';scheduleUpdaterHide(6500);
+    el.icon.textContent='ℹ️';
+    el.title.textContent='Razvojni zagon';
+    el.text.textContent=status.message||'Updater se preverja v nameščeni EXE različici.';
+    el.check.style.display='inline-flex';
+    scheduleUpdaterHide(6500);
     return;
   }
   if(state==='error'){
-    el.icon.textContent='⚠️';el.title.textContent='Napaka pri posodobitvi';el.text.textContent=status.message||'Preveri internetno povezavo in updater.log.';
+    el.icon.textContent='⚠️';
+    el.title.textContent='Posodobitev ni bila izvedena';
+    el.text.textContent=status.message||'Podrobnosti so zapisane v updater.log.';
     el.check.style.display='inline-flex';
-    return;
   }
 }
 function initUpdaterUi(){
@@ -4130,13 +4170,40 @@ function manualUpdateCheck(){
     showToast('Preverjanje posodobitev je na voljo v namizni EXE aplikaciji.','error');
     return;
   }
-  renderUpdaterStatus({state:'checking'});
+  renderUpdaterStatus({state:'checking',manual:true});
   window.desktopStorage.checkForUpdates();
 }
 function installDownloadedUpdate(){
   if(window.desktopStorage&&typeof window.desktopStorage.installUpdate==='function'){
     window.desktopStorage.installUpdate();
   }
+}
+function renderRollbackStatus(status){
+  const box=document.getElementById('rollbackStatus');
+  if(!box)return;
+  if(!status||!status.ok){
+    box.innerHTML='<span style="color:var(--danger)">Rollback modul ni pripravljen: '+esc((status&&status.error)||'neznana napaka')+'</span>';
+    return;
+  }
+  const versions=Array.isArray(status.availableVersions)?status.availableVersions:[];
+  const latest=versions[0];
+  const blocked=Array.isArray(status.blockedVersions)?status.blockedVersions:[];
+  box.innerHTML=
+    '<strong>Mapa:</strong> '+esc(status.root||'')+'<br>'+
+    '<strong>Pripravljena povrnitev:</strong> '+(latest?('v'+esc(latest.version)):'installer se bo pripravil v ozadju')+'<br>'+
+    '<strong>Blokirane pokvarjene verzije:</strong> '+(blocked.length?blocked.map(v=>'v'+esc(v)).join(', '):'ni');
+}
+function initRollbackUi(){
+  if(!isDesktopApp()||!window.desktopStorage||typeof window.desktopStorage.getRollbackStatus!=='function')return;
+  renderRollbackStatus(window.desktopStorage.getRollbackStatus());
+  if(typeof window.desktopStorage.onRollbackChanged==='function'){
+    window.desktopStorage.onRollbackChanged(renderRollbackStatus);
+  }
+}
+async function openRollbackFolder(){
+  if(!window.desktopStorage||typeof window.desktopStorage.openRollbackFolder!=='function')return;
+  const result=await window.desktopStorage.openRollbackFolder();
+  if(!result||!result.ok)showToast('Mape Rollback ni bilo mogoče odpreti: '+((result&&result.error)||'?'),'error');
 }
 
 // ============================================================
@@ -4190,6 +4257,7 @@ document.getElementById('prestaviDatum').addEventListener('change',updatePrestav
 async function initializeApplication(){
   setupDesktopStorageUi();
   initUpdaterUi();
+  initRollbackUi();
   initializeClinicContext();
   await startAutoSync(false);
   // Cloud pull lahko prinese ambulante, zato kontekst po sinhronizaciji ponovno preverimo.

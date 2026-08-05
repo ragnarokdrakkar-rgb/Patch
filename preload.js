@@ -12,6 +12,12 @@ contextBridge.exposeInMainWorld('desktopStorage', {
   refocusWindow: () => ipcRenderer.send('window:refocus'),
   checkForUpdates: () => ipcRenderer.send('updater:check'),
   installUpdate: () => ipcRenderer.send('updater:install'),
+  getRollbackStatus: () => ipcRenderer.sendSync('rollback:status-sync'),
+  openRollbackFolder: () => ipcRenderer.invoke('rollback:open-folder'),
+  onRollbackChanged: (callback) => {
+    if (typeof callback !== 'function') return;
+    ipcRenderer.on('rollback:changed', (_event, status) => callback(status));
+  },
   onUpdaterStatus: (callback) => {
     if (typeof callback !== 'function') return;
     ipcRenderer.on('updater:status', (_event, status) => callback(status));
